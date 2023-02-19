@@ -5,6 +5,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection.Metadata;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -51,7 +52,8 @@ namespace StockbridgeFinancial.Crawler
                 var settings = new CefSettings()
                 {
                     //By default CefSharp will use an in-memory cache, you need to specify a Cache Folder to persist data
-                    CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CefSharp\\Cache")
+                    CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CefSharp\\Cache"),
+                    LogSeverity = LogSeverity.Disable
                 };
 
                 //Perform dependency check to make sure all relevant resources are in our output directory.
@@ -144,14 +146,163 @@ function gatherData(el){
     }
 }";
 
-                    var a = await browser.EvaluateScriptAsync(@$"
+                    var firstpage20 = await browser.EvaluateScriptAsync(@$"
                     let data = [];
                     {JSgatherDataFn}
                     document.querySelector(""#vehicle-cards-container"").querySelectorAll('.vehicle-card').forEach(v => {{data.push(gatherData(v))}});
                     data;
 ");
 
-                    var vehicleData = (IList<object>)a.Result;
+                    List<VehicleSearchResultItemDTO> gatheredVehicles = new List<VehicleSearchResultItemDTO>();
+                    var firstpage20Result = JsonSerializer.Deserialize<List<VehicleSearchResultItemDTO>>(JsonSerializer.Serialize(firstpage20.Result));
+
+                    Console.WriteLine("First page gathered");
+
+                    Console.WriteLine("Total gathered vehicles: " + gatheredVehicles.Count);
+                    Console.WriteLine($"Gathered Vehicles writes into file named 1_{gatheredVehicles.Count}.json");
+
+                    File.WriteAllText($"1_{gatheredVehicles.Count}.json", JsonSerializer.Serialize(firstpage20Result));
+
+                    gatheredVehicles.AddRange(firstpage20Result);
+
+                    _ = await browser.EvaluateScriptAsync(@"
+let a = location.search;
+location.href = '?page=2&page_size=20&'+a.slice(1,a.length)
+                    ");
+
+
+                    await Task.Delay(500);
+
+                    await WaitBrowserLoading(browser);
+
+
+
+
+                    var secondpage20 = await browser.EvaluateScriptAsync(@$"
+                    let data = [];
+                    {JSgatherDataFn}
+                    document.querySelector(""#vehicle-cards-container"").querySelectorAll('.vehicle-card').forEach(v => {{data.push(gatherData(v))}});
+                    data;
+");
+
+                    var secondpage20Result = JsonSerializer.Deserialize<List<VehicleSearchResultItemDTO>>(JsonSerializer.Serialize(secondpage20.Result));
+
+                    Console.WriteLine("Second page gathered");
+
+                    Console.WriteLine("Total gathered vehicles: " + gatheredVehicles.Count);
+                    Console.WriteLine($"Gathered Vehicles writes into file named 2_{gatheredVehicles.Count}.json");
+
+                    File.WriteAllText($"2_{gatheredVehicles.Count}.json", JsonSerializer.Serialize(secondpage20Result));
+
+                    gatheredVehicles.AddRange(secondpage20Result);
+
+
+                    Console.WriteLine("Total gathered vehicles: " + gatheredVehicles.Count);
+                    Console.WriteLine();
+                    Console.WriteLine("Choose specific vehicle to gather details");
+                    Console.WriteLine("------Vehicles-------");
+                    foreach (var item in gatheredVehicles)
+                    {
+                        var index = gatheredVehicles.IndexOf(item);
+                        Console.WriteLine($"[ {index} ] - {item.Title} - {item.DealerName}");
+                    }
+                    Console.WriteLine();
+                    int selectedVehicleIndex = -1;
+                    Console.WriteLine("Enter vehicle index: ");
+                    while (!int.TryParse(Console.ReadLine(), out selectedVehicleIndex) || gatheredVehicles.Count < selectedVehicleIndex || selectedVehicleIndex < 0)
+                    {
+                        Console.WriteLine($"Invalid Input. Input must between 0 and {gatheredVehicles.Count}");
+                    }
+
+                    Console.WriteLine();
+                    Console.WriteLine("Gathering vehicle details...");
+                    var selectedVehicle = gatheredVehicles[selectedVehicleIndex];
+                    var selectedVehicleId = selectedVehicle.DetailLink.Split('/').Last();
+                    _ = await browser.EvaluateScriptAsync(@$"location.href = '{selectedVehicle.DetailLink}'");
+                    await Task.Delay(500);
+                    await WaitBrowserLoading(browser);
+
+                    var JSGatherDetailDataFn = @"function getDetailData() {
+    let basicKeys = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.basics-section > dl"").querySelectorAll('dt')].map(v => v?.innerText);
+    let basicValues = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.basics-section > dl"").querySelectorAll('dd')].map(v => v?.innerText);
+    let basicData = {};
+    basicKeys.forEach((key, index) => {
+        basicData[key] = basicValues[index];
+    });
+
+    let featuresKeys = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.features-section > dl"").querySelectorAll('dt')].map(v => v?.innerText);
+    let featuresValues = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.features-section > dl"").querySelectorAll('dd')].map(v => v?.innerText);
+    let featuresData = {};
+    featuresKeys.forEach((key, index) => {
+        featuresData[key] = featuresValues[index];
+    });
+
+    let ratingBreakdownKeys = [...document.querySelector(""#vehicle-reviews > div > div.review-breakdown > ul"").querySelectorAll('.sds-definition-list__display-name')].map(v => v?.innerText);
+    let ratingBreakdownValues = [...document.querySelector(""#vehicle-reviews > div > div.review-breakdown > ul"").querySelectorAll('.sds-definition-list__value')].map(v => v?.innerText);
+    let ratingBreakdownData = {};
+    ratingBreakdownKeys.forEach((key, index) => {
+        ratingBreakdownData[key] = ratingBreakdownValues[index];
+    });
+
+    let reviews = [];
+    let reviewRatings = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('.sds-rating__count')].map(v => v?.innerText);
+    let reviewTitles = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('h3')].map(v => v?.innerText);
+    let reviewDates = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('div.review-byline.review-section > div:nth-child(1)')].map(v => v?.innerText);
+    let reviewBy = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('div.review-byline.review-section > div:nth-child(2)')].map(v => v?.innerText);
+    let reviewDescription =  [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('p')].map(v => v?.innerText);
+    reviewRatings.forEach((rating, index) => {
+        reviews.push({
+            ""Rating"": rating,
+            ""Title"": reviewTitles[index],
+            ""Date"": reviewDates[index],
+            ""By"": reviewBy[index],
+            ""Description"": reviewDescription[index]
+        });
+    });
+
+
+    return {
+        ""Link"": window.location.href,
+        ""Images"": [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > vdp-gallery > gallery-slides"").querySelectorAll('img')].map(t => t.src),
+        ""Contact"": document.querySelector(""#dealer-section--embedded1 > div > section > div"")?.innerText,
+        ""StockType"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.title-section > p"")?.innerText,
+        ""Title"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.title-section > h1"")?.innerText,
+        ""MileAge"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.title-section > div.listing-mileage"")?.innerText,
+        ""PrimaryPrice"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.price-section > span.primary-price"")?.innerText,
+        ""PriceDrop"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.price-section > span.secondary-price.price-drop"")?.innerText,
+        ""AvgMarketPrice"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.deal-gauge--container.great-deal > div.deal-gauge-graph-container > div.deal-gauge-box-plot > div > span > strong"")?.innerText,
+        ""EstimatedMonthlyPayment"": document.querySelector(""#emp-tooltip-1 > span > a > span.js-estimated-monthly-payment-formatted-value-with-abr"")?.innerText,
+        ""VehicleBadges"": [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.vehicle-badging"").querySelectorAll('span')].map(t => t?.innerText),
+        ""BasicData"": basicData,
+        ""FeaturesData"": featuresData,
+        ""PriceHistory"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.price-history-container > cars-price-history"").priceHistoryData,
+        ""SellerName"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.seller-info > h3"")?.innerText,
+        ""SellerRate"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.seller-info > div.sds-rating > span"")?.innerText,
+        ""SellerAddress"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.seller-info > div:nth-child(4) > div"")?.innerText,
+        ""SellerNoteAboutCar"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.seller-info > section.sds-page-section.seller-notes.scrubbed-html > div.sellers-notes"")?.innerText + document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.seller-info > section.sds-page-section.seller-notes.scrubbed-html > div.sellers-notes > span.sellers-notes-truncated.hidden"")?.innerText,
+        ""ConsumerReviewRating"": document.querySelector(""#vehicle-reviews > div > div.sds-rating.sds-rating--big > span"")?.innerText,
+        ""ConsumerReviewCount"": document.querySelector(""#vehicle-reviews > div > div.sds-rating.sds-rating--big > a"")?.innerText,
+        ""ConsumerReviewRatingBreakdown"": ratingBreakdownData,
+        ""ConsumerReviews"": reviews
+
+    }
+}";
+
+                    var detailResult = await browser.EvaluateScriptAsync($@"
+                        getDetailData()
+                    ");
+
+                    var detailData = JsonSerializer.Deserialize<VehicleDetailResultItemDto>(JsonSerializer.Serialize(detailResult.Result));
+
+                    Console.WriteLine("Detail data gathered");
+                    Console.WriteLine($"Writes into {selectedVehicleId}.json");
+
+
+                    File.WriteAllText($"{selectedVehicleId}.json", JsonSerializer.Serialize(detailData));
+
+                    Console.WriteLine($"Detail data written into json file named {selectedVehicleId}.json");
+
+
 
 
 
