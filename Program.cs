@@ -51,7 +51,7 @@ namespace StockbridgeFinancial.Crawler
                 {
                     async Task WaitBrowserLoading(ChromiumWebBrowser _browser)
                     {
-                        while (_browser.IsLoading)
+                        while (_browser.IsLoading && _browser.CanExecuteJavascriptInMainFrame)
                         {
                             await Task.Delay(500);
                         }
@@ -181,7 +181,7 @@ location.href = '?page=2&page_size=20&'+a.slice(1,a.length)
                         Console.WriteLine();
                         int selectedVehicleIndex = -1;
                         Console.WriteLine("Enter vehicle index: ");
-                        while (!int.TryParse(Console.ReadLine(), out selectedVehicleIndex) || gatheredVehicles.Count-1 < selectedVehicleIndex || selectedVehicleIndex < 0)
+                        while (!int.TryParse(Console.ReadLine(), out selectedVehicleIndex) || gatheredVehicles.Count - 1 < selectedVehicleIndex || selectedVehicleIndex < 0)
                         {
                             Console.WriteLine($"Invalid Input. Input must between 0 and {gatheredVehicles.Count}");
                         }
@@ -189,44 +189,45 @@ location.href = '?page=2&page_size=20&'+a.slice(1,a.length)
                         Console.WriteLine();
                         Console.WriteLine("Gathering vehicle details...");
                         var selectedVehicle = gatheredVehicles[selectedVehicleIndex];
-                        var selectedVehicleId = selectedVehicle.DetailLink.Split('/')[selectedVehicle.DetailLink.Split('/').Length-2];
+                        var selectedVehicleId = selectedVehicle.DetailLink.Split('/')[selectedVehicle.DetailLink.Split('/').Length - 2];
 
                         // routing to car's detail page
                         _ = await _browser.EvaluateScriptAsync(@$"location.href = '{selectedVehicle.DetailLink}'");
-                        
+
                         await Task.Delay(500);
                         await WaitBrowserLoading(_browser);
 
 
                         // on detail page gathering data from detail page is provided by js function named getDetailData
-                        var JSGatherDetailDataFn = @"function getDetailData() {
-    let basicKeys = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.basics-section > dl"").querySelectorAll('dt')].map(v => v?.innerText);
-    let basicValues = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.basics-section > dl"").querySelectorAll('dd')].map(v => v?.innerText);
+                        var JSGatherDetailDataFn = @"
+function getDetailData(){
+    let basicKeys = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.basics-section > dl"")?.querySelectorAll('dt')].map(v => v?.innerText);
+    let basicValues = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.basics-section > dl"")?.querySelectorAll('dd')].map(v => v?.innerText);
     let basicData = {};
     basicKeys.forEach((key, index) => {
         basicData[key] = basicValues[index];
     });
 
-    let featuresKeys = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.features-section > dl"").querySelectorAll('dt')].map(v => v?.innerText);
-    let featuresValues = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.features-section > dl"").querySelectorAll('dd')].map(v => v?.innerText);
+    let featuresKeys = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.features-section > dl"")?.querySelectorAll('dt')].map(v => v?.innerText);
+    let featuresValues = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.features-section > dl"")?.querySelectorAll('dd')].map(v => v?.innerText);
     let featuresData = {};
     featuresKeys.forEach((key, index) => {
         featuresData[key] = featuresValues[index];
     });
 
-    let ratingBreakdownKeys = [...document.querySelector(""#vehicle-reviews > div > div.review-breakdown > ul"").querySelectorAll('.sds-definition-list__display-name')].map(v => v?.innerText);
-    let ratingBreakdownValues = [...document.querySelector(""#vehicle-reviews > div > div.review-breakdown > ul"").querySelectorAll('.sds-definition-list__value')].map(v => v?.innerText);
+    let ratingBreakdownKeys = [...document.querySelector(""#vehicle-reviews > div > div.review-breakdown > ul"")?.querySelectorAll('.sds-definition-list__display-name')].map(v => v?.innerText);
+    let ratingBreakdownValues = [...document.querySelector(""#vehicle-reviews > div > div.review-breakdown > ul"")?.querySelectorAll('.sds-definition-list__value')].map(v => v?.innerText);
     let ratingBreakdownData = {};
     ratingBreakdownKeys.forEach((key, index) => {
         ratingBreakdownData[key] = ratingBreakdownValues[index];
     });
 
     let reviews = [];
-    let reviewRatings = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('.sds-rating__count')].map(v => v?.innerText);
-    let reviewTitles = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('h3')].map(v => v?.innerText);
-    let reviewDates = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('div.review-byline.review-section > div:nth-child(1)')].map(v => v?.innerText);
-    let reviewBy = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('div.review-byline.review-section > div:nth-child(2)')].map(v => v?.innerText);
-    let reviewDescription =  [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"").querySelectorAll('p')].map(v => v?.innerText);
+    let reviewRatings = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"")?.querySelectorAll('.sds-rating__count')].map(v => v?.innerText);
+    let reviewTitles = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"")?.querySelectorAll('h3')].map(v => v?.innerText);
+    let reviewDates = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"")?.querySelectorAll('div.review-byline.review-section > div:nth-child(1)')].map(v => v?.innerText);
+    let reviewBy = [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"")?.querySelectorAll('div.review-byline.review-section > div:nth-child(2)')].map(v => v?.innerText);
+    let reviewDescription =  [...document.querySelector(""#vehicle-reviews > div > div.section-content.sds-template-sidebar__content > div"")?.querySelectorAll('p')].map(v => v?.innerText);
     reviewRatings.forEach((rating, index) => {
         reviews.push({
             ""Rating"": rating,
@@ -240,7 +241,7 @@ location.href = '?page=2&page_size=20&'+a.slice(1,a.length)
 
     return {
         ""Link"": window.location.href,
-        ""Images"": [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > vdp-gallery > gallery-slides"").querySelectorAll('img')].map(t => t.src),
+        ""Images"": [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > vdp-gallery > gallery-slides"")?.querySelectorAll('img')].map(t => t.src),
         ""Contact"": document.querySelector(""#dealer-section--embedded1 > div > section > div"")?.innerText,
         ""StockType"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.title-section > p"")?.innerText,
         ""Title"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.title-section > h1"")?.innerText,
@@ -249,7 +250,7 @@ location.href = '?page=2&page_size=20&'+a.slice(1,a.length)
         ""PriceDrop"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.price-section > span.secondary-price.price-drop"")?.innerText,
         ""AvgMarketPrice"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.deal-gauge--container.great-deal > div.deal-gauge-graph-container > div.deal-gauge-box-plot > div > span > strong"")?.innerText,
         ""EstimatedMonthlyPayment"": document.querySelector(""#emp-tooltip-1 > span > a > span.js-estimated-monthly-payment-formatted-value-with-abr"")?.innerText,
-        ""VehicleBadges"": [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.vehicle-badging"").querySelectorAll('span')].map(t => t?.innerText),
+        ""VehicleBadges"": [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > section > header > div.vehicle-badging"")?.querySelectorAll('span')].map(t => t?.innerText),
         ""BasicData"": basicData,
         ""FeaturesData"": featuresData,
         ""PriceHistory"": document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.price-history-container > cars-price-history"").priceHistoryData,
@@ -263,21 +264,25 @@ location.href = '?page=2&page_size=20&'+a.slice(1,a.length)
         ""ConsumerReviews"": reviews
 
     }
-}";
+}".Trim();
 
+                        await Task.Delay(3000);
+                        var scriptResult = await _browser.EvaluateScriptAsync($@"
+var detailResult = null;
+{JSGatherDetailDataFn}
+detailResult = getDetailData();
+".Trim());
                         // runs function and get result from browser
-                        var detailResult = await _browser.EvaluateScriptAsync($@"
-                        getDetailData()
-                    ");
+                        var detailResult = await _browser.EvaluateScriptAsync($@"detailResult");
 
-                        var detailData = JsonSerializer.Deserialize<VehicleDetailResultItemDto>(JsonSerializer.Serialize(detailResult.Result));
+                        var detailData =JsonSerializer.Serialize(detailResult.Result);
 
                         Console.WriteLine("Detail data gathered");
                         Console.WriteLine($"Writes into {fileNamePrefix}_{selectedVehicleId}.json");
 
 
                         files.Add($"{fileNamePrefix}_{selectedVehicleId}.json");
-                        File.WriteAllText($"{fileNamePrefix}_{selectedVehicleId}.json", JsonSerializer.Serialize(detailData));
+                        File.WriteAllText($"{fileNamePrefix}_{selectedVehicleId}.json", detailData);
 
                         Console.WriteLine($"Detail data written into json file named {selectedVehicleId}.json");
                     }
@@ -330,7 +335,7 @@ setTimeout(() => {
                     Console.WriteLine("Do you want me to different crawling? [Y/N]");
                     var startAgain = Console.ReadKey();
 
-                    while(startAgain.Key == ConsoleKey.Y)
+                    while (startAgain.Key == ConsoleKey.Y)
                     {
                         Console.WriteLine();
                         Console.WriteLine();
