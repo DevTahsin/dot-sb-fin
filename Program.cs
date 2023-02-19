@@ -11,21 +11,9 @@ using System.Threading.Tasks;
 
 namespace StockbridgeFinancial.Crawler
 {
-    
-    /// <summary>
-    /// CefSharp.OffScreen Minimal Example
-    /// </summary>
     public static class Program
     {
 
-        /// <summary>
-        /// Asynchronous demo using CefSharp.OffScreen
-        /// Loads google.com, uses javascript to fill out the search box then takes a screenshot which is opened
-        /// in the default image viewer.
-        /// For a synchronous demo see <see cref="MainSync(string[])"/> below.
-        /// </summary>
-        /// <param name="args">args</param>
-        /// <returns>exit code</returns>
         public static int Main(string[] args)
         {
 #if ANYCPU
@@ -35,17 +23,9 @@ namespace StockbridgeFinancial.Crawler
 
             const string testUrl = "https://cars.com/";
 
-            Console.WriteLine("This example application will load {0}, take a screenshot, and save it to your desktop.", testUrl);
-            Console.WriteLine("You may see Chromium debugging output, please wait...");
+            Console.WriteLine($"{testUrl} data crawling is starting");
+            Console.WriteLine("please wait...");
             Console.WriteLine();
-
-            //Console apps don't have a SynchronizationContext, so to ensure our await calls continue on the main thread we use a super simple implementation from
-            //https://devblogs.microsoft.com/pfxteam/await-synchronizationcontext-and-console-apps/
-            //Continuations will happen on the main thread. Cef.Initialize/Cef.Shutdown must be called on the same Thread.
-            //The Nito.AsyncEx.Context Nuget package has a more advanced implementation
-            //should you wish to use a pre-build implementation.
-            //https://github.com/StephenCleary/AsyncEx/blob/8a73d0467d40ca41f9f9cf827c7a35702243abb8/doc/AsyncContext.md#console-example-using-asynccontext
-            //NOTE: This is only required if you use await
 
             AsyncContext.Run(async delegate
             {
@@ -64,23 +44,7 @@ namespace StockbridgeFinancial.Crawler
                     throw new Exception("Unable to initialize CEF, check the log file.");
                 }
 
-                //document.getElementsByClassName('nav-user-name')[0].click();
-                //document.querySelector("body > div.global-header-container > cars-global-header").shadowRoot.querySelector("ep-modal > div:nth-child(3) > div > ep-button:nth-child(1)").click();
-                //document.querySelector("#auth-modal-email").value = 'johngerson808@gmail.com';
-                //document.querySelector("#auth-modal-current-password").value = 'test8008';
-                //document.querySelector("body > div.global-header-container > cars-global-header > cars-auth-modal").shadowRoot.querySelector("ep-modal > form > ep-button").shadowRoot.querySelector("button").click();
-
-
-                //document.querySelector("#make-model-search-stocktype").value = "used";
-                //document.querySelector("#makes").value = "tesla";
-                //document.querySelector("#models").value = "tesla-model_s";
-                //document.querySelector("#make-model-max-price").value = "100000";
-                //document.querySelector("#make-model-maximum-distance").value = "all";
-                //document.querySelector("#make-model-zip").value = "94596";
-                //document.querySelector("#by-make-tab > div > div.sds-field.sds-home-search__submit > button").click();
-
-
-
+                List<string> files = new List<string>();
 
                 // Create the CefSharp.OffScreen.ChromiumWebBrowser instance
                 using (var browser = new ChromiumWebBrowser(testUrl))
@@ -92,43 +56,46 @@ namespace StockbridgeFinancial.Crawler
                             await Task.Delay(500);
                         }
                     }
-                    var initialLoadResponse = await browser.WaitForInitialLoadAsync();
+                    #region Gathering Data For Specific Filter Function
 
-                    if (!initialLoadResponse.Success)
+                    async Task GatherDataForSpecificFilter(
+                            ChromiumWebBrowser _browser,
+                            string stocktype = "used",
+                            string make = "tesla",
+                            string model = "tesla-model_s",
+                            string maxprice = "100000",
+                            string maxdistance = "all",
+                            string zip = "94596"
+                        )
                     {
-                        throw new Exception(string.Format("Page load failed with ErrorCode:{0}, HttpStatusCode:{1}", initialLoadResponse.ErrorCode, initialLoadResponse.HttpStatusCode));
-                    }
+                        var fileNamePrefix = $"{stocktype}_{make}_{model}_{maxprice}_{maxdistance}_{zip}";
 
-                    _ = await browser.EvaluateScriptAsync(@"
-                document.getElementsByClassName('nav-user-name')[0].click();
-document.querySelector(""body > div.global-header-container > cars-global-header"").shadowRoot.querySelector(""ep-modal > div:nth-child(3) > div > ep-button:nth-child(1)"").click();
-setTimeout(() => {
-    document.querySelector(""#auth-modal-email"").value = 'johngerson808@gmail.com';
-    document.querySelector(""#auth-modal-current-password"").value = 'test8008';
-    document.querySelector(""body > div.global-header-container > cars-global-header > cars-auth-modal"").shadowRoot.querySelector(""ep-modal > form > ep-button"").shadowRoot.querySelector(""button"").click();
-}, 100);
+                        // routing to cars.com
+                        _ = await _browser.EvaluateScriptAsync(@"
+                         window.location.href = ""https://www.cars.com/""
 ");
 
-                    await Task.Delay(500);
+                        await Task.Delay(500);
+                        await WaitBrowserLoading(_browser);
 
+                        Console.WriteLine("Searching for " + stocktype + " " + make + " " + model + " within " + maxdistance + " miles of " + zip + " with max price of " + maxprice);
 
-
-                    await WaitBrowserLoading(browser);
-
-                    _ = await browser.EvaluateScriptAsync(@"
-                 document.querySelector(""#make-model-search-stocktype"").value = ""used"";
-                document.querySelector(""#makes"").value = ""tesla"";
-                document.querySelector(""#models"").value = ""tesla-model_s"";
-                document.querySelector(""#make-model-max-price"").value = ""100000"";
-                document.querySelector(""#make-model-maximum-distance"").value = ""all"";
-                document.querySelector(""#make-model-zip"").value = ""94596"";
+                        // filters retrieved from function is apply to form
+                        _ = await _browser.EvaluateScriptAsync($@"
+                 document.querySelector(""#make-model-search-stocktype"").value = ""{stocktype}"";
+                document.querySelector(""#makes"").value = ""{make}"";
+                document.querySelector(""#models"").value = ""{model}"";
+                document.querySelector(""#make-model-max-price"").value = ""{maxprice}"";
+                document.querySelector(""#make-model-maximum-distance"").value = ""{maxdistance}"";
+                document.querySelector(""#make-model-zip"").value = ""{zip}"";
                 document.querySelector(""#by-make-tab > div > div.sds-field.sds-home-search__submit > button"").click();
 ");
-                    await Task.Delay(500);
+                        await Task.Delay(500);
 
-                    await WaitBrowserLoading(browser);
+                        await WaitBrowserLoading(_browser);
 
-                    var JSgatherDataFn = @"
+                        // gathering data from search result is provided by js function named gatherData
+                        var JSgatherDataFn = @"
 function gatherData(el){
     return {
         StockType: el.querySelector('.stock-type')?.innerText,
@@ -146,83 +113,93 @@ function gatherData(el){
     }
 }";
 
-                    var firstpage20 = await browser.EvaluateScriptAsync(@$"
+                        // runs gatherData function on console and get results from console by EvaluateScriptAsync function
+                        var firstpage20 = await _browser.EvaluateScriptAsync(@$"
                     let data = [];
                     {JSgatherDataFn}
                     document.querySelector(""#vehicle-cards-container"").querySelectorAll('.vehicle-card').forEach(v => {{data.push(gatherData(v))}});
                     data;
 ");
 
-                    List<VehicleSearchResultItemDTO> gatheredVehicles = new List<VehicleSearchResultItemDTO>();
-                    var firstpage20Result = JsonSerializer.Deserialize<List<VehicleSearchResultItemDTO>>(JsonSerializer.Serialize(firstpage20.Result));
+                        List<VehicleSearchResultItemDTO> gatheredVehicles = new List<VehicleSearchResultItemDTO>();
+                        var firstpage20Result = JsonSerializer.Deserialize<List<VehicleSearchResultItemDTO>>(JsonSerializer.Serialize(firstpage20.Result));
 
-                    Console.WriteLine("First page gathered");
+                        Console.WriteLine("First page gathered");
 
-                    Console.WriteLine("Total gathered vehicles: " + gatheredVehicles.Count);
-                    Console.WriteLine($"Gathered Vehicles writes into file named 1_{gatheredVehicles.Count}.json");
+                        Console.WriteLine("Total gathered vehicles: " + firstpage20Result.Count);
+                        Console.WriteLine($"Gathered Vehicles writes into file named {fileNamePrefix}_1_{gatheredVehicles.Count}.json");
 
-                    File.WriteAllText($"1_{gatheredVehicles.Count}.json", JsonSerializer.Serialize(firstpage20Result));
+                        files.Add($"{fileNamePrefix}_1_{gatheredVehicles.Count}.json");
+                        File.WriteAllText($"{fileNamePrefix}_1_{gatheredVehicles.Count}.json", JsonSerializer.Serialize(firstpage20Result));
 
-                    gatheredVehicles.AddRange(firstpage20Result);
+                        gatheredVehicles.AddRange(firstpage20Result);
 
-                    _ = await browser.EvaluateScriptAsync(@"
+                        // go page 2 by changing url
+                        _ = await _browser.EvaluateScriptAsync(@"
 let a = location.search;
 location.href = '?page=2&page_size=20&'+a.slice(1,a.length)
                     ");
 
 
-                    await Task.Delay(500);
+                        await Task.Delay(500);
 
-                    await WaitBrowserLoading(browser);
-
-
+                        await WaitBrowserLoading(_browser);
 
 
-                    var secondpage20 = await browser.EvaluateScriptAsync(@$"
+
+                        // gather second page data same method as page 1 crawling
+                        var secondpage20 = await _browser.EvaluateScriptAsync(@$"
                     let data = [];
                     {JSgatherDataFn}
                     document.querySelector(""#vehicle-cards-container"").querySelectorAll('.vehicle-card').forEach(v => {{data.push(gatherData(v))}});
                     data;
 ");
 
-                    var secondpage20Result = JsonSerializer.Deserialize<List<VehicleSearchResultItemDTO>>(JsonSerializer.Serialize(secondpage20.Result));
+                        var secondpage20Result = JsonSerializer.Deserialize<List<VehicleSearchResultItemDTO>>(JsonSerializer.Serialize(secondpage20.Result));
 
-                    Console.WriteLine("Second page gathered");
+                        Console.WriteLine("Second page gathered");
 
-                    Console.WriteLine("Total gathered vehicles: " + gatheredVehicles.Count);
-                    Console.WriteLine($"Gathered Vehicles writes into file named 2_{gatheredVehicles.Count}.json");
+                        Console.WriteLine("Total gathered vehicles: " + secondpage20Result.Count);
+                        Console.WriteLine($"Gathered Vehicles writes into file named {fileNamePrefix}_2_{gatheredVehicles.Count}.json");
 
-                    File.WriteAllText($"2_{gatheredVehicles.Count}.json", JsonSerializer.Serialize(secondpage20Result));
+                        files.Add($"{fileNamePrefix}_2_{gatheredVehicles.Count}.json");
+                        File.WriteAllText($"{fileNamePrefix}_2_{gatheredVehicles.Count}.json", JsonSerializer.Serialize(secondpage20Result));
 
-                    gatheredVehicles.AddRange(secondpage20Result);
+                        gatheredVehicles.AddRange(secondpage20Result);
+
+                        // after that ask prompt to choose vehicle for specific car crawling
+
+                        Console.WriteLine("Total gathered vehicles: " + gatheredVehicles.Count);
+                        Console.WriteLine();
+                        Console.WriteLine("Choose specific vehicle to gather details");
+                        Console.WriteLine("------Vehicles-------");
+                        foreach (var item in gatheredVehicles)
+                        {
+                            var index = gatheredVehicles.IndexOf(item);
+                            Console.WriteLine($"[ {index} ] - {item.Title} - {item.DealerName}");
+                        }
+                        Console.WriteLine();
+                        int selectedVehicleIndex = -1;
+                        Console.WriteLine("Enter vehicle index: ");
+                        while (!int.TryParse(Console.ReadLine(), out selectedVehicleIndex) || gatheredVehicles.Count-1 < selectedVehicleIndex || selectedVehicleIndex < 0)
+                        {
+                            Console.WriteLine($"Invalid Input. Input must between 0 and {gatheredVehicles.Count}");
+                        }
+
+                        Console.WriteLine();
+                        Console.WriteLine("Gathering vehicle details...");
+                        var selectedVehicle = gatheredVehicles[selectedVehicleIndex];
+                        var selectedVehicleId = selectedVehicle.DetailLink.Split('/')[selectedVehicle.DetailLink.Split('/').Length-2];
+
+                        // routing to car's detail page
+                        _ = await _browser.EvaluateScriptAsync(@$"location.href = '{selectedVehicle.DetailLink}'");
+                        
+                        await Task.Delay(500);
+                        await WaitBrowserLoading(_browser);
 
 
-                    Console.WriteLine("Total gathered vehicles: " + gatheredVehicles.Count);
-                    Console.WriteLine();
-                    Console.WriteLine("Choose specific vehicle to gather details");
-                    Console.WriteLine("------Vehicles-------");
-                    foreach (var item in gatheredVehicles)
-                    {
-                        var index = gatheredVehicles.IndexOf(item);
-                        Console.WriteLine($"[ {index} ] - {item.Title} - {item.DealerName}");
-                    }
-                    Console.WriteLine();
-                    int selectedVehicleIndex = -1;
-                    Console.WriteLine("Enter vehicle index: ");
-                    while (!int.TryParse(Console.ReadLine(), out selectedVehicleIndex) || gatheredVehicles.Count < selectedVehicleIndex || selectedVehicleIndex < 0)
-                    {
-                        Console.WriteLine($"Invalid Input. Input must between 0 and {gatheredVehicles.Count}");
-                    }
-
-                    Console.WriteLine();
-                    Console.WriteLine("Gathering vehicle details...");
-                    var selectedVehicle = gatheredVehicles[selectedVehicleIndex];
-                    var selectedVehicleId = selectedVehicle.DetailLink.Split('/').Last();
-                    _ = await browser.EvaluateScriptAsync(@$"location.href = '{selectedVehicle.DetailLink}'");
-                    await Task.Delay(500);
-                    await WaitBrowserLoading(browser);
-
-                    var JSGatherDetailDataFn = @"function getDetailData() {
+                        // on detail page gathering data from detail page is provided by js function named getDetailData
+                        var JSGatherDetailDataFn = @"function getDetailData() {
     let basicKeys = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.basics-section > dl"").querySelectorAll('dt')].map(v => v?.innerText);
     let basicValues = [...document.querySelector(""#ae-skip-to-content > div.vdp-content-wrapper.price-history-grid > div.basics-content-wrapper > section.sds-page-section.basics-section > dl"").querySelectorAll('dd')].map(v => v?.innerText);
     let basicData = {};
@@ -288,160 +265,109 @@ location.href = '?page=2&page_size=20&'+a.slice(1,a.length)
     }
 }";
 
-                    var detailResult = await browser.EvaluateScriptAsync($@"
+                        // runs function and get result from browser
+                        var detailResult = await _browser.EvaluateScriptAsync($@"
                         getDetailData()
                     ");
 
-                    var detailData = JsonSerializer.Deserialize<VehicleDetailResultItemDto>(JsonSerializer.Serialize(detailResult.Result));
+                        var detailData = JsonSerializer.Deserialize<VehicleDetailResultItemDto>(JsonSerializer.Serialize(detailResult.Result));
 
-                    Console.WriteLine("Detail data gathered");
-                    Console.WriteLine($"Writes into {selectedVehicleId}.json");
-
-
-                    File.WriteAllText($"{selectedVehicleId}.json", JsonSerializer.Serialize(detailData));
-
-                    Console.WriteLine($"Detail data written into json file named {selectedVehicleId}.json");
+                        Console.WriteLine("Detail data gathered");
+                        Console.WriteLine($"Writes into {fileNamePrefix}_{selectedVehicleId}.json");
 
 
+                        files.Add($"{fileNamePrefix}_{selectedVehicleId}.json");
+                        File.WriteAllText($"{fileNamePrefix}_{selectedVehicleId}.json", JsonSerializer.Serialize(detailData));
 
+                        Console.WriteLine($"Detail data written into json file named {selectedVehicleId}.json");
+                    }
+                    #endregion
 
+                    var initialLoadResponse = await browser.WaitForInitialLoadAsync();
 
-
-
-
-                    // Wait for the screenshot to be taken.
-                    var bitmapAsByteArray = await browser.CaptureScreenshotAsync();
-
-                    // File path to save our screenshot e.g. C:\Users\{username}\Desktop\CefSharp screenshot.png
-                    var screenshotPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "CefSharp screenshot.png");
-
-                    Console.WriteLine();
-                    Console.WriteLine("Screenshot ready. Saving to {0}", screenshotPath);
-
-                    File.WriteAllBytes(screenshotPath, bitmapAsByteArray);
-
-                    Console.WriteLine("Screenshot saved. Launching your default image viewer...");
-
-                    // Tell Windows to launch the saved image.
-                    Process.Start(new ProcessStartInfo(screenshotPath)
+                    if (!initialLoadResponse.Success)
                     {
-                        // UseShellExecute is false by default on .NET Core.
-                        UseShellExecute = true
-                    });
+                        throw new Exception(string.Format("Page load failed with ErrorCode:{0}, HttpStatusCode:{1}", initialLoadResponse.ErrorCode, initialLoadResponse.HttpStatusCode));
+                    }
 
-                    Console.WriteLine("Image viewer launched. Press any key to exit.");
+                    Console.WriteLine("Signing in to cars.com with credentials");
+                    Console.WriteLine("Username: johngerson808@gmail.com");
+                    Console.WriteLine("Password: test8008");
+                    Console.WriteLine();
+
+                    _ = await browser.EvaluateScriptAsync(@"
+                document.getElementsByClassName('nav-user-name')[0].click();
+document.querySelector(""body > div.global-header-container > cars-global-header"").shadowRoot.querySelector(""ep-modal > div:nth-child(3) > div > ep-button:nth-child(1)"").click();
+setTimeout(() => {
+    document.querySelector(""#auth-modal-email"").value = 'johngerson808@gmail.com';
+    document.querySelector(""#auth-modal-current-password"").value = 'test8008';
+    document.querySelector(""body > div.global-header-container > cars-global-header > cars-auth-modal"").shadowRoot.querySelector(""ep-modal > form > ep-button"").shadowRoot.querySelector(""button"").click();
+}, 100);
+");
+
+                    await Task.Delay(500);
+
+
+
+                    await WaitBrowserLoading(browser);
+
+                    Console.WriteLine("Login successful");
+                    Console.WriteLine();
+
+                    // Tesla model s search
+                    await GatherDataForSpecificFilter(browser);
+
+                    Console.WriteLine("Tesla Model S data gathered successfully");
+                    Console.WriteLine();
+
+
+                    // Tesla model x search
+                    await GatherDataForSpecificFilter(browser, model: "tesla-model_x");
+
+                    Console.WriteLine("Tesla Model X data gathered successfully");
+                    Console.WriteLine();
+
+                    Console.WriteLine("Do you want me to different crawling? [Y/N]");
+                    var startAgain = Console.ReadKey();
+
+                    while(startAgain.Key == ConsoleKey.Y)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine();
+                        Console.WriteLine("Please enter the filter you want to crawl");
+                        Console.WriteLine("Example: tesla-model_y");
+                        Console.WriteLine();
+
+                        var filter = Console.ReadLine();
+
+                        await GatherDataForSpecificFilter(browser, model: filter);
+
+                        Console.WriteLine();
+                        Console.WriteLine();
+
+                        Console.WriteLine("Do you want me to different crawling? [Y/N]");
+                        startAgain = Console.ReadKey();
+                    }
+
                 }
 
-                // Wait for user to press a key before exit
+                Console.WriteLine();
+                Console.WriteLine("Files:");
+                foreach (var item in files)
+                {
+                    Console.WriteLine($"{item}");
+                }
+
+
+                Console.WriteLine("Press any key to exit program");
+
                 Console.ReadKey();
 
-                // Clean up Chromium objects. You need to call this in your application otherwise
-                // you will get a crash when closing.
                 Cef.Shutdown();
             });
 
             return 0;
         }
 
-        /// <summary>
-        /// Synchronous demo using CefSharp.OffScreen
-        /// Loads google.com, uses javascript to fill out the search box then takes a screenshot which is opened
-        /// in the default image viewer.
-        /// For a asynchronous demo see <see cref="Main(string[])"/> above.
-        /// To use this demo simply delete the <see cref="Main(string[])"/> method and rename this method to Main.
-        /// </summary>
-        /// <param name="args">args</param>
-        /// <returns>exit code</returns>
-        public static int MainSync(string[] args)
-        {
-#if ANYCPU
-            //Only required for PlatformTarget of AnyCPU
-            CefRuntime.SubscribeAnyCpuAssemblyResolver();
-#endif
-
-            const string testUrl = "https://www.google.com/";
-
-            Console.WriteLine("This example application will load {0}, take a screenshot, and save it to your desktop.", testUrl);
-            Console.WriteLine("You may see Chromium debugging output, please wait...");
-            Console.WriteLine();
-
-            var settings = new CefSettings()
-            {
-                //By default CefSharp will use an in-memory cache, you need to specify a Cache Folder to persist data
-                CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CefSharp\\Cache")
-            };
-
-            //Perform dependency check to make sure all relevant resources are in our output directory.
-            Cef.Initialize(settings, performDependencyCheck: true, browserProcessHandler: null);
-
-            // Create the offscreen Chromium browser.
-            var browser = new ChromiumWebBrowser(testUrl);
-
-            EventHandler<LoadingStateChangedEventArgs> handler = null;
-
-            handler = (s, e) =>
-            {
-                // Check to see if loading is complete - this event is called twice, one when loading starts
-                // second time when it's finished
-                if (!e.IsLoading)
-                {
-                    // Remove the load event handler, because we only want one snapshot of the page.
-                    browser.LoadingStateChanged -= handler;
-
-                    var scriptTask = browser.EvaluateScriptAsync("document.querySelector('[name=q]').value = 'CefSharp Was Here!'");
-
-                    scriptTask.ContinueWith(t =>
-                    {
-                        if(!t.Result.Success)
-                        {
-                            throw new Exception("EvaluateScriptAsync failed:" + t.Result.Message);
-                        }
-
-                        //Give the browser a little time to render
-                        Thread.Sleep(500);
-                        // Wait for the screenshot to be taken.
-                        var task = browser.CaptureScreenshotAsync();
-                        task.ContinueWith(x =>
-                        {
-                            // File path to save our screenshot e.g. C:\Users\{username}\Desktop\CefSharp screenshot.png
-                            var screenshotPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "CefSharp screenshot.png");
-
-                            Console.WriteLine();
-                            Console.WriteLine("Screenshot ready. Saving to {0}", screenshotPath);
-
-                            var bitmapAsByteArray = x.Result;
-
-                            // Save the Bitmap to the path.
-                            File.WriteAllBytes(screenshotPath, bitmapAsByteArray);
-
-                            Console.WriteLine("Screenshot saved.  Launching your default image viewer...");
-
-                            // Tell Windows to launch the saved image.
-                            Process.Start(new ProcessStartInfo(screenshotPath)
-                            {
-                                // UseShellExecute is false by default on .NET Core.
-                                UseShellExecute = true
-                            });
-
-                            Console.WriteLine("Image viewer launched.  Press any key to exit.");
-                        }, TaskScheduler.Default);
-                    });
-                }
-            };
-
-            // An event that is fired when the first page is finished loading.
-            // This returns to us from another thread.
-            browser.LoadingStateChanged += handler;
-
-            // We have to wait for something, otherwise the process will exit too soon.
-            Console.ReadKey();
-
-            // Clean up Chromium objects. You need to call this in your application otherwise
-            // you will get a crash when closing.
-            //The ChromiumWebBrowser instance will be disposed
-            Cef.Shutdown();
-
-            return 0;
-        }
     }
 }
