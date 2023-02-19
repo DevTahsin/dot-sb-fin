@@ -357,6 +357,7 @@ setTimeout(() => {
                 }
 
                 Console.WriteLine();
+                Console.WriteLine($"Files saved in the {Environment.CurrentDirectory}");
                 Console.WriteLine("Files:");
                 foreach (var item in files)
                 {
